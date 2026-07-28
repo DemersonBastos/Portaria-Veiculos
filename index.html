@@ -552,11 +552,12 @@ function gerarPDF(){
   const rows = [];
   ROSTER.forEach(v=>{
     const trips = dayData.entries[v.id] || [];
+    const prefixoVertical = v.prefixo.split("").join("\n"); // cada caractere numa linha, igual ao original
     trips.forEach(t=>{
       const filled = t.kmInicial || t.kmFinal || t.saida || t.entrada || t.motorista || t.destino;
       if(!filled) return;
       rows.push([
-        v.equipamento, v.prefixo, t.kmInicial||"", t.kmFinal||"", t.motorista||"",
+        v.equipamento, prefixoVertical, t.kmInicial||"", t.kmFinal||"", t.motorista||"",
         t.saida||"", t.entrada||"", t.servico||"", t.destino||""
       ]);
     });
@@ -567,18 +568,18 @@ function gerarPDF(){
     doc.setFontSize(11);
     doc.text("Nenhum veículo preenchido neste dia.", marginX, 100);
   } else {
-    // Mesma ordem e proporção de colunas da folha original — PREFIXO fica na lateral, estreito
+    // Mesma ordem e proporção de colunas da folha original — PREFIXO fica na lateral, estreito, em texto vertical
     doc.autoTable({
       startY: 90,
       margin:{left:marginX, right:marginX},
-      head: [["EQUIPAMENTO","PREFIXO","KM INICIAL","KM FINAL","MOTORISTA","SAÍDA","ENTRADA","SERVIÇO REALIZADO","DESTINO/OBSERVAÇÃO"]],
+      head: [["EQUIPAMENTO","P\nR\nE\nF\nI\nX\nO","KM INICIAL","KM FINAL","MOTORISTA","SAÍDA","ENTRADA","SERVIÇO REALIZADO","DESTINO/OBSERVAÇÃO"]],
       body: rows,
       theme: "grid",
       styles:{fontSize:8, cellPadding:4, lineColor:[0,0,0], lineWidth:0.5, textColor:[0,0,0], valign:"middle"},
-      headStyles:{fillColor:[255,255,255], textColor:[0,0,0], fontStyle:"bold", halign:"center", lineWidth:0.75},
+      headStyles:{fillColor:[255,255,255], textColor:[0,0,0], fontStyle:"bold", halign:"center", valign:"middle", lineWidth:0.75},
       columnStyles:{
         0:{cellWidth:150},
-        1:{cellWidth:38, halign:"center"},
+        1:{cellWidth:26, halign:"center", valign:"middle", fontSize:8},
         8:{cellWidth:110}
       }
     });
