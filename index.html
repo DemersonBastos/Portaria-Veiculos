@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Controle de Veículos — Portaria</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#14181C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Portaria">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+  :root{
+    --bg:#14181C;
+    --panel:#1C2228;
+    --panel-2:#20272E;
+    --line:#2E3742;
+    --line-soft:#252C33;
+    --text:#E8EAED;
+    --text-dim:#8B96A3;
+    --amber:#E8A33D;
+    --amber-dim:#4a3a1e;
+    --green:#4FA876;
+    --red:#D9534F;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:'Barlow',sans-serif; -webkit-font-smoothing:antialiased;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .disp{font-family:'Barlow Condensed',sans-serif; font-weight:700; letter-spacing:.02em;}
+
+  header.top{
+    position:sticky; top:0; z-index:20;
+    background:linear-gradient(180deg, #171C21 0%, #14181C 100%);
+    border-bottom:1px solid var(--line);
+    padding:14px 16px 12px;
+  }
+  .brand{display:flex; align-items:baseline; justify-content:space-between; gap:10px;}
+  .brand .eyebrow{font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em;
+    color:var(--amber); text-transform:uppercase;}
+  .brand h1{font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:22px;
+    margin:2px 0 0; letter-spacing:.01em;}
+  .obra{font-size:12px; color:var(--text-dim); margin-top:2px;}
+
+  .fields{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px;}
+  .field{display:flex; flex-direction:column; gap:4px;}
+  .field label{font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--text-dim);}
+  .field input{
+    background:var(--panel); border:1px solid var(--line); color:var(--text);
+    border-radius:6px; padding:9px 10px; font-size:14px; font-family:'IBM Plex Mono',monospace;
+    width:100%;
+  }
+  .field input:focus{outline:none; border-color:var(--amber);}
+
+  .actionbar{display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;}
+  button{
+    font-family:'Barlow',sans-serif; font-weight:600; font-size:13px;
+    border-radius:6px; padding:10px 14px; border:1px solid var(--line);
+    background:var(--panel); color:var(--text); cursor:pointer;
+  }
+  button:active{transform:translateY(1px);}
+  .btn-primary{background:var(--amber); color:#1A1204; border-color:var(--amber);}
+  .btn-ghost{background:transparent;}
+  .btn-sm{padding:6px 10px; font-size:12px;}
+  .btn-danger{color:var(--red); border-color:#4a2323;}
+
+  main{padding:14px 16px 100px;}
+  .summary{display:flex; gap:14px; margin:4px 0 14px; font-size:12px; color:var(--text-dim);}
+  .summary b{color:var(--text); font-family:'IBM Plex Mono',monospace;}
+
+  .card{
+    position:relative;
+    background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    margin-bottom:10px; overflow:hidden;
+  }
+  .card::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:4px;
+    background:var(--line-soft);
+  }
+  .card.has-data::before{background:var(--amber);}
+  .card.completed::before{background:var(--green);}
+
+  .card-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 14px 12px 18px; cursor:pointer; gap:10px;
+  }
+  .card-id{display:flex; align-items:baseline; gap:8px; min-width:0;}
+  .prefixo{
+    font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:13px;
+    color:var(--amber); background:var(--amber-dim); padding:2px 7px; border-radius:4px;
+    flex:none;
+  }
+  .equip{font-size:13.5px; font-weight:500; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap;}
+  .chevron{color:var(--text-dim); font-size:12px; flex:none; transition:transform .15s;}
+  .card.open .chevron{transform:rotate(180deg);}
+
+  .trips{display:none; border-top:1px solid var(--line); padding:10px 14px 14px 18px;}
+  .card.open .trips{display:block;}
+
+  .trip{
+    background:var(--panel-2); border:1px dashed var(--line); border-radius:8px;
+    padding:10px; margin-bottom:8px; position:relative;
+  }
+  .trip-label{
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--text-dim); margin-bottom:8px;
+  }
+  .handoff{
+    display:flex; align-items:center; gap:7px;
+    font-size:11.5px; color:var(--amber); background:var(--amber-dim);
+    border-radius:6px; padding:7px 9px; margin-bottom:8px;
+  }
+  .handoff .ic{font-size:13px; flex:none;}
+  .trip-grid{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .trip-grid .full{grid-column:1 / -1;}
+  .trip-grid .field label{font-size:9.5px;}
+  .trip-grid input, .trip-grid textarea{
+    background:var(--bg); border:1px solid var(--line); color:var(--text);
+    border-radius:6px; padding:8px 9px; font-size:13.5px; width:100%;
+    font-family:'IBM Plex Mono',monospace;
+  }
+  .trip-grid textarea{font-family:'Barlow',sans-serif; resize:vertical; min-height:34px;}
+  .trip-grid input:focus, .trip-grid textarea:focus{outline:none; border-color:var(--amber);}
+  .trip-foot{display:flex; justify-content:flex-end; margin-top:6px;}
+
+  .add-trip{width:100%; margin-top:2px; border-style:dashed;}
+
+  .fab-row{
+    position:fixed; bottom:0; left:0; right:0;
+    background:linear-gradient(0deg, #14181C 60%, rgba(20,24,28,0));
+    padding:18px 16px 14px; display:flex; gap:8px; z-index:20;
+  }
+  .fab-row button{flex:1; padding:13px; font-size:14px; border-radius:8px;}
+
+  .filterbar{display:flex; gap:6px; margin-bottom:12px; overflow-x:auto; padding-bottom:2px;}
+  .chip{
+    flex:none; font-size:12px; padding:6px 12px; border-radius:999px;
+    border:1px solid var(--line); color:var(--text-dim); background:var(--panel);
+    cursor:pointer;
+  }
+  .chip.active{background:var(--amber); color:#1A1204; border-color:var(--amber); font-weight:600;}
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:50;
+    display:none; align-items:flex-end;
+  }
+  .modal-overlay.show{display:flex;}
+  .modal{
+    background:var(--panel); width:100%; max-height:80vh; overflow-y:auto;
+    border-radius:14px 14px 0 0; padding:16px; border-top:1px solid var(--line);
+  }
+  .modal h2{font-family:'Barlow Condensed',sans-serif; font-size:18px; margin:0 0 10px;}
+  .hist-item{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:11px 4px; border-bottom:1px solid var(--line-soft); font-size:13.5px;
+  }
+  .hist-item span.d{font-family:'IBM Plex Mono',monospace; color:var(--amber);}
+  .empty{color:var(--text-dim); font-size:13px; text-align:center; padding:24px 0;}
+
+  .toast{
+    position:fixed; top:14px; left:50%; transform:translateX(-50%) translateY(-60px);
+    background:var(--green); color:#0d1f14; font-weight:600; font-size:13px;
+    padding:10px 16px; border-radius:8px; z-index:60; transition:transform .25s;
+  }
+  .toast.show{transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <div>
+      <div class="eyebrow">Diário de veículos</div>
+      <h1>Acompanhamento — Portaria</h1>
+      <div class="obra">OBRA: PETROBRAS · BAHIA</div>
+    </div>
+  </div>
+  <div class="fields">
+    <div class="field">
+      <label>Responsável</label>
+      <input id="responsavel" type="text" placeholder="Seu nome" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Data</label>
+      <input id="data" type="date">
+    </div>
+  </div>
+  <div class="actionbar">
+    <button class="btn-ghost btn-sm" id="btnHistorico">📅 Histórico</button>
+    <button class="btn-ghost btn-sm" id="btnLimpar">Limpar dia</button>
+  </div>
+</header>
+
+<main>
+  <div class="summary">
+    <span><b id="cntPreench">0</b> preenchidos</span>
+    <span><b id="cntAndamento">0</b> em rota</span>
+    <span><b id="cntTotal">47</b> veículos</span>
+  </div>
+
+  <div class="filterbar">
+    <div class="chip active" data-filter="all">Todos</div>
+    <div class="chip" data-filter="data">Com dados</div>
+    <div class="chip" data-filter="andamento">Em rota (sem entrada)</div>
+    <div class="chip" data-filter="vazio">Sem preencher</div>
+  </div>
+
+  <div id="cardList"></div>
+</main>
+
+<div class="fab-row">
+  <button class="btn-ghost" id="btnSalvar">💾 Salvar dia</button>
+  <button class="btn-primary" id="btnPdf">📄 Gerar PDF</button>
+</div>
+
+<div class="modal-overlay" id="histOverlay">
+  <div class="modal">
+    <h2>Histórico de dias</h2>
+    <div id="histList"></div>
+    <button class="btn-ghost" style="width:100%; margin-top:10px;" id="btnFecharHist">Fechar</button>
+  </div>
+</div>
+
+<div class="toast" id="toast">Salvo</div>
+
+<script>
+// ---------- Storage polyfill (dados ficam salvos no próprio aparelho, sem internet) ----------
+window.storage = {
+  async get(key){
+    const v = localStorage.getItem(key);
+    if(v === null) throw new Error("not found");
+    return { key, value: v };
+  },
+  async set(key, value){
+    localStorage.setItem(key, value);
+    return { key, value };
+  },
+  async delete(key){
+    localStorage.removeItem(key);
+    return { key, deleted: true };
+  },
+  async list(prefix){
+    const keys = Object.keys(localStorage).filter(k => !prefix || k.startsWith(prefix));
+    return { keys };
+  }
+};
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+}
+
+// ---------- Roster (fixed template — matches printed columns of the PDF) ----------
+const ROSTER = [
+["3717","CAVALO MECÂNICO"],
+["3799","CAMINHÃO ESPARGIDOR 6X4 - EDJALMA"],
+["3823","FROTA LEVE FIAT/STRADA ENDURANCE"],
+["3846","CAMINHÃO BASCULANTE 6X4 - GUTEMBERG"],
+["3847","CAMINHÃO BASCULANTE 6X4 - JOSUÉ"],
+["3848","CAMINHÃO BASCULANTE 6X4 - ROBSON"],
+["3849","CAMINHÃO BASCULANTE 6X4 - DGIVALDO"],
+["3850","CAMINHÃO BASCULANTE 6X4 - NERIGELSON"],
+["3879","CAMINHÃO BASCULANTE 6X4 - JAILTON"],
+["3880","CAMINHÃO BASCULANTE 6X4 - ROGÉRIO"],
+["3881","CAMINHÃO BASCULANTE 6X4 - FABRÍCIO"],
+["3885","CAMINHÃO BASCULANTE 6X4 - CICERO"],
+["3886","CAMINHÃO BASCULANTE 6X4 - ADENILSON"],
+["3889","CAMINHÃO BASCULANTE 6X4 - GENIVAL"],
+["3890","CAMINHÃO BASCULANTE 6X4 - PEDRO"],
+["3891","CAMINHÃO BASCULANTE 6X4 - GENIVAL"],
+["3893","CAMINHÃO BASCULANTE 6X4 - ERICO"],
+["3894","CAMINHÃO BASCULANTE 6X4 - JOSIVALDO"],
+["3936","CAVALO MECÂNICO 6X4 - MARCILIO"],
+["3941","FROTA LEVE ONIX - EZIEL"],
+["3943","CAVALO MECÂNICO 6X4 - JORGE"],
+["3949","FROTA LEVE VW/POLO TRACK MA - CARLOS ANDRÉ"],
+["3950","FROTA LEVE FIAT/DOBLO ESSENCE 7L"],
+["3951","FROTA LEVE FIAT/DOBLO ESSENCE 7L"],
+["3962","FIORINO"],
+["3964","FROTA LEVE FIAT/STRADA ENDURANCE - CARLOS MACHADO"],
+["4017","FROTA LEVE VW/POLO TRACK MA - ANNE"],
+["4025","CAMINHÃO PIPA 6X4"],
+["4032","CAMINHÃO BASCULANTE 6X4 - JOÃO EVANGELISTA"],
+["4033","CAMINHÃO COMBOIO 6X4 - JOSELITO"],
+["4068","FIAT MOBI LIKE"],
+["4090","CAMINHÃO BASCULANTE 6X4 - LUCIANO"],
+["4104","CAMINHÃO BASCULANTE 6X4 - FABRÍCIO"],
+["4124","NISSAN FRONTIER"],
+["4129","CAMINHÃO BASCULANTE 6X4 - AMONIO"],
+["4130","CAMINHÃO BASCULANTE 6X4 - MIZAEL"],
+["4138","FROTA LEVE VW/POLO TRACK MA - CARLOS ANDRÉ"],
+["4148","FIAT MOBI"],
+["4165","CAMINHÃO PIPA 6X4"],
+["4166","CAMINHÃO PIPA 6X4"],
+["4192","FIAT STRADA FREEDOM"],
+["RGKF870","CCT-02 CAMINHÃO 3X4 - MILTON"],
+["RGNC238","CCT-03 CAMINHÃO 3X4 - NILSON"],
+["RGNC248","CCT-04 CAMINHÃO 3X4 - ARIOMAR"],
+["RQBJ684","VAT-33 VW/T-CROSS"],
+["TYB4B72","VAT-79 RENAULT KWID ZEN"],
+["TEC0A11","VAT-104 HYUNDAI/HB20"]
+].map((v,i)=>({id:"v"+i, prefixo:v[0], equipamento:v[1]}));
+
+function emptyTrip(){
+  return {kmInicial:"", kmFinal:"", motorista:"", saida:"", entrada:"", servico:"", destino:""};
+}
+
+let currentDate = todayISO();
+let dayData = { responsavel:"", entries:{} }; // entries[vehicleId] = [trip,...]
+let openCards = new Set();
+let activeFilter = "all";
+
+function todayISO(){
+  const d = new Date();
+  const tz = d.getTimezoneOffset()*60000;
+  return new Date(d - tz).toISOString().slice(0,10);
+}
+function dayKey(dateStr){ return "day:"+dateStr; }
+
+async function loadDay(dateStr){
+  try{
+    const res = await window.storage.get(dayKey(dateStr));
+    if(res && res.value){
+      dayData = JSON.parse(res.value);
+    } else {
+      dayData = { responsavel: dayData.responsavel || "", entries:{} };
+    }
+  }catch(e){
+    dayData = { responsavel: dayData.responsavel || "", entries:{} };
+  }
+  document.getElementById('responsavel').value = dayData.responsavel || "";
+  render();
+}
+
+async function saveDay(silent){
+  dayData.responsavel = document.getElementById('responsavel').value;
+  try{
+    await window.storage.set(dayKey(currentDate), JSON.stringify(dayData));
+    // update index of saved days
+    let idx = [];
+    try{
+      const r = await window.storage.get('days-index');
+      if(r && r.value) idx = JSON.parse(r.value);
+    }catch(e){ idx = []; }
+    if(!idx.includes(currentDate)){
+      idx.push(currentDate);
+      idx.sort().reverse();
+      await window.storage.set('days-index', JSON.stringify(idx));
+    }
+    if(!silent) showToast("Dia salvo ✓");
+  }catch(e){
+    if(!silent) showToast("Erro ao salvar");
+  }
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+function vehicleStatus(vid){
+  const trips = dayData.entries[vid] || [];
+  const filled = trips.filter(t => t.kmInicial || t.kmFinal || t.saida || t.entrada || t.motorista || t.destino);
+  if(filled.length === 0) return "vazio";
+  const allDone = filled.every(t => t.entrada);
+  return allDone ? "completo" : "andamento";
+}
+
+function render(){
+  const list = document.getElementById('cardList');
+  list.innerHTML = "";
+  let cntPreench = 0, cntAndamento = 0;
+
+  ROSTER.forEach(v=>{
+    const status = vehicleStatus(v.id);
+    if(status !== "vazio") cntPreench++;
+    if(status === "andamento") cntAndamento++;
+    if(activeFilter === "data" && status === "vazio") return;
+    if(activeFilter === "andamento" && status !== "andamento") return;
+    if(activeFilter === "vazio" && status !== "vazio") return;
+
+    if(!dayData.entries[v.id] || dayData.entries[v.id].length===0){
+      dayData.entries[v.id] = [emptyTrip()];
+    }
+    const trips = dayData.entries[v.id];
+    const isOpen = openCards.has(v.id);
+
+    const card = document.createElement('div');
+    card.className = "card" + (status==="andamento"?" has-data":"") + (status==="completo"?" completed":"") + (isOpen?" open":"");
+
+    const head = document.createElement('div');
+    head.className = "card-head";
+    head.innerHTML = `
+      <div class="card-id">
+        <span class="prefixo">${v.prefixo}</span>
+        <span class="equip">${v.equipamento}</span>
+      </div>
+      <span class="chevron">▾</span>`;
+    head.onclick = ()=>{ isOpen ? openCards.delete(v.id) : openCards.add(v.id); render(); };
+    card.appendChild(head);
+
+    const tripsWrap = document.createElement('div');
+    tripsWrap.className = "trips";
+
+    trips.forEach((trip, idx)=>{
+      const t = document.createElement('div');
+      t.className = "trip";
+      const prev = idx>0 ? trips[idx-1] : null;
+      const handoffHTML = prev
+        ? `<div class="handoff"><span class="ic">🔁</span><span>Troca de motorista — recebeu o veículo${prev.kmFinal? " com "+prev.kmFinal+" km" : ""}${prev.motorista? " de "+prev.motorista : ""}.</span></div>`
+        : ``;
+      t.innerHTML = `
+        <div class="trip-label">Trecho ${idx+1}${trips.length>1?` de ${trips.length}`:``}</div>
+        ${handoffHTML}
+        <div class="trip-grid">
+          <div class="field"><label>KM inicial</label><input data-f="kmInicial" inputmode="numeric" placeholder="0" value="${trip.kmInicial}"></div>
+          <div class="field"><label>KM final</label><input data-f="kmFinal" inputmode="numeric" placeholder="0" value="${trip.kmFinal}"></div>
+          <div class="field"><label>Motorista</label><input data-f="motorista" placeholder="Nome" value="${trip.motorista}"></div>
+          <div class="field"><label>Serviço realizado</label><input data-f="servico" placeholder="—" value="${trip.servico}"></div>
+          <div class="field"><label>Saída</label><input data-f="saida" placeholder="hh:mm" value="${trip.saida}"></div>
+          <div class="field"><label>Entrada</label><input data-f="entrada" placeholder="hh:mm" value="${trip.entrada}"></div>
+          <div class="field full"><label>Destino / Observação</label><textarea data-f="destino" rows="1">${trip.destino}</textarea></div>
+        </div>
+        <div class="trip-foot">
+          ${trips.length>1 ? `<button class="btn-danger btn-sm" data-del="1">Remover viagem</button>` : ``}
+        </div>`;
+      t.querySelectorAll('[data-f]').forEach(inp=>{
+        inp.addEventListener('input', ()=>{ trip[inp.dataset.f] = inp.value; });
+      });
+      const delBtn = t.querySelector('[data-del]');
+      if(delBtn) delBtn.onclick = ()=>{ trips.splice(idx,1); render(); };
+      tripsWrap.appendChild(t);
+    });
+
+    const addBtn = document.createElement('button');
+    addBtn.className = "btn-ghost add-trip";
+    addBtn.textContent = "+ Troca de motorista / novo trecho";
+    addBtn.onclick = ()=>{
+      const last = trips[trips.length-1];
+      const nt = emptyTrip();
+      if(last && last.kmFinal) nt.kmInicial = last.kmFinal; // continua do km final anterior
+      trips.push(nt);
+      render();
+      openCards.add(v.id);
+    };
+    tripsWrap.appendChild(addBtn);
+
+    card.appendChild(tripsWrap);
+    list.appendChild(card);
+  });
+
+  document.getElementById('cntPreench').textContent = cntPreench;
+  document.getElementById('cntAndamento').textContent = cntAndamento;
+}
+
+// ---------- PDF export ----------
+function gerarPDF(){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({orientation:"landscape", unit:"pt", format:"a4"});
+  const responsavel = document.getElementById('responsavel').value || "—";
+  const dataFmt = currentDate.split('-').reverse().join('/');
+
+  doc.setFontSize(13);
+  doc.text("ACOMPANHAMENTO DIÁRIO DE VEÍCULOS E EQUIPAMENTOS", 40, 34);
+  doc.setFontSize(10);
+  doc.text(`OBRA: PETROBRAS - BAHIA      RESPONSÁVEL: ${responsavel}      DATA: ${dataFmt}`, 40, 50);
+
+  const rows = [];
+  ROSTER.forEach(v=>{
+    const trips = dayData.entries[v.id] || [];
+    trips.forEach(t=>{
+      const filled = t.kmInicial || t.kmFinal || t.saida || t.entrada || t.motorista || t.destino;
+      if(!filled) return;
+      rows.push([
+        v.prefixo, v.equipamento, t.kmInicial||"", t.kmFinal||"", t.motorista||"",
+        t.saida||"", t.entrada||"", t.servico||"", t.destino||""
+      ]);
+    });
+  });
+
+  if(rows.length===0){
+    doc.setFontSize(11);
+    doc.text("Nenhum veículo preenchido neste dia.", 40, 80);
+  } else {
+    doc.autoTable({
+      startY: 62,
+      head: [["PREFIXO","EQUIPAMENTO","KM INICIAL","KM FINAL","MOTORISTA","SAÍDA","ENTRADA","SERVIÇO","DESTINO/OBS."]],
+      body: rows,
+      styles:{fontSize:8, cellPadding:4},
+      headStyles:{fillColor:[30,35,40], textColor:255},
+      columnStyles:{1:{cellWidth:150}, 8:{cellWidth:110}}
+    });
+  }
+  doc.save(`Portaria_${currentDate}.pdf`);
+}
+
+// ---------- History modal ----------
+async function openHistorico(){
+  const wrap = document.getElementById('histList');
+  wrap.innerHTML = "Carregando…";
+  let idx = [];
+  try{
+    const r = await window.storage.get('days-index');
+    if(r && r.value) idx = JSON.parse(r.value);
+  }catch(e){ idx = []; }
+  if(idx.length===0){
+    wrap.innerHTML = `<div class="empty">Nenhum dia salvo ainda.</div>`;
+  } else {
+    wrap.innerHTML = "";
+    idx.forEach(d=>{
+      const item = document.createElement('div');
+      item.className = "hist-item";
+      item.innerHTML = `<span class="d">${d.split('-').reverse().join('/')}</span><button class="btn-ghost btn-sm">Abrir</button>`;
+      item.querySelector('button').onclick = ()=>{
+        document.getElementById('data').value = d;
+        currentDate = d;
+        loadDay(d);
+        closeHistorico();
+      };
+      wrap.appendChild(item);
+    });
+  }
+  document.getElementById('histOverlay').classList.add('show');
+}
+function closeHistorico(){ document.getElementById('histOverlay').classList.remove('show'); }
+
+// ---------- Wire up ----------
+document.getElementById('data').value = currentDate;
+document.getElementById('data').addEventListener('change', (e)=>{
+  currentDate = e.target.value;
+  openCards = new Set();
+  loadDay(currentDate);
+});
+document.getElementById('btnSalvar').onclick = ()=>saveDay(false);
+document.getElementById('btnPdf').onclick = async ()=>{ await saveDay(true); gerarPDF(); };
+document.getElementById('btnHistorico').onclick = openHistorico;
+document.getElementById('btnFecharHist').onclick = closeHistorico;
+document.getElementById('btnLimpar').onclick = ()=>{
+  if(confirm("Limpar todos os dados preenchidos hoje?")){
+    dayData.entries = {};
+    render();
+  }
+};
+document.querySelectorAll('.chip').forEach(chip=>{
+  chip.onclick = ()=>{
+    document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+    chip.classList.add('active');
+    activeFilter = chip.dataset.filter;
+    render();
+  };
+});
+
+loadDay(currentDate);
+</script>
+</body>
+</html>
