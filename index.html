@@ -171,6 +171,45 @@
     padding:10px 16px; border-radius:8px; z-index:60; transition:transform .25s;
   }
   .toast.show{transform:translateX(-50%) translateY(0);}
+
+  .sheet-modal{
+    position:fixed; inset:0; background:var(--bg); z-index:70;
+    display:none; flex-direction:column;
+  }
+  .sheet-modal.show{display:flex;}
+  .sheet-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 14px; border-bottom:1px solid var(--line); flex:none;
+  }
+  .sheet-head h2{font-family:'Barlow Condensed',sans-serif; font-size:17px; margin:0;}
+  .sheet-scroll{flex:1; overflow:auto; -webkit-overflow-scrolling:touch;}
+  table.sheet{border-collapse:collapse; width:100%; font-size:12px;}
+  table.sheet th, table.sheet td{
+    border:1px solid var(--line); padding:0; white-space:nowrap;
+  }
+  table.sheet th{
+    position:sticky; top:0; background:#20272E; color:var(--text-dim);
+    font-size:10px; text-transform:uppercase; letter-spacing:.05em;
+    padding:8px 8px; text-align:left; z-index:1;
+  }
+  table.sheet td.eq{
+    padding:8px; background:var(--panel); font-size:11.5px; min-width:150px;
+    white-space:normal; color:var(--text);
+  }
+  table.sheet td.eq .pf{color:var(--amber); font-family:'IBM Plex Mono',monospace; font-size:10px; display:block;}
+  table.sheet td input{
+    background:transparent; border:none; color:var(--text); font-family:'IBM Plex Mono',monospace;
+    font-size:12px; padding:8px; width:100%; min-width:70px;
+  }
+  table.sheet td input:focus{outline:2px solid var(--amber); outline-offset:-2px; background:var(--panel-2);}
+  table.sheet tr.row-vazio td.eq{opacity:.45;}
+  table.sheet tr.row-andamento{background:rgba(232,163,61,.06);}
+  table.sheet tr.row-completo{background:rgba(79,168,118,.06);}
+  .sheet-foot{
+    flex:none; padding:12px 14px; border-top:1px solid var(--line);
+    display:flex; gap:8px;
+  }
+  .sheet-foot button{flex:1; padding:12px;}
 </style>
 </head>
 <body>
@@ -217,8 +256,23 @@
 </main>
 
 <div class="fab-row">
-  <button class="btn-ghost" id="btnSalvar">💾 Salvar dia</button>
+  <button class="btn-ghost" id="btnPlanilha">📋 Editar planilha</button>
+  <button class="btn-ghost" id="btnSalvar">💾 Salvar</button>
   <button class="btn-primary" id="btnPdf">📄 Gerar PDF</button>
+</div>
+
+<div class="sheet-modal" id="sheetModal">
+  <div class="sheet-head">
+    <h2>Planilha do dia — revisar / editar</h2>
+    <button class="btn-ghost btn-sm" id="btnFecharSheet">Fechar ✕</button>
+  </div>
+  <div class="sheet-scroll">
+    <table class="sheet" id="sheetTable"></table>
+  </div>
+  <div class="sheet-foot">
+    <button class="btn-ghost" id="btnSalvarSheet">💾 Salvar alterações</button>
+    <button class="btn-primary" id="btnPdfSheet">📄 Salvar e gerar PDF</button>
+  </div>
 </div>
 
 <div class="modal-overlay" id="histOverlay">
@@ -461,17 +515,39 @@ function render(){
   document.getElementById('cntAndamento').textContent = cntAndamento;
 }
 
-// ---------- PDF export ----------
+// ---------- PDF export (replica fiel do layout da planilha original) ----------
 function gerarPDF(){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({orientation:"landscape", unit:"pt", format:"a4"});
   const responsavel = document.getElementById('responsavel').value || "—";
   const dataFmt = currentDate.split('-').reverse().join('/');
+  const pageW = doc.internal.pageSize.getWidth();
+  const marginX = 40;
+  const boxW = pageW - marginX*2;
 
-  doc.setFontSize(13);
-  doc.text("ACOMPANHAMENTO DIÁRIO DE VEÍCULOS E EQUIPAMENTOS", 40, 34);
-  doc.setFontSize(10);
-  doc.text(`OBRA: PETROBRAS - BAHIA      RESPONSÁVEL: ${responsavel}      DATA: ${dataFmt}`, 40, 50);
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.75);
+
+  // Caixa do título
+  doc.rect(marginX, 30, boxW, 20);
+  doc.setFont("helvetica","bold");
+  doc.setFontSize(12);
+  doc.text("ACOMPANHAMENTO DIÁRIO DE VEÍCULOS E EQUIPAMENTOS", pageW/2, 44, {align:"center"});
+
+  // Caixa esquerda: OBRA (linha 1) / RESPONSÁVEL (linha 2)
+  const leftW = boxW * 0.75;
+  const rightW = boxW - leftW;
+  doc.rect(marginX, 50, leftW, 30);
+  doc.line(marginX, 65, marginX+leftW, 65); // divide as duas linhas
+  doc.setFont("helvetica","normal");
+  doc.setFontSize(9.5);
+  doc.text("OBRA: PETROBRAS - BAHIA", marginX+6, 60);
+  doc.text(`RESPONSÁVEL: ${responsavel}`, marginX+6, 76);
+
+  // Caixa direita: DATA
+  doc.rect(marginX+leftW, 50, rightW, 30);
+  doc.setFont("helvetica","bold");
+  doc.text(`DATA: ${dataFmt}`, marginX+leftW+8, 69);
 
   const rows = [];
   ROSTER.forEach(v=>{
@@ -480,27 +556,76 @@ function gerarPDF(){
       const filled = t.kmInicial || t.kmFinal || t.saida || t.entrada || t.motorista || t.destino;
       if(!filled) return;
       rows.push([
-        v.prefixo, v.equipamento, t.kmInicial||"", t.kmFinal||"", t.motorista||"",
+        v.equipamento, v.prefixo, t.kmInicial||"", t.kmFinal||"", t.motorista||"",
         t.saida||"", t.entrada||"", t.servico||"", t.destino||""
       ]);
     });
   });
 
   if(rows.length===0){
+    doc.setFont("helvetica","normal");
     doc.setFontSize(11);
-    doc.text("Nenhum veículo preenchido neste dia.", 40, 80);
+    doc.text("Nenhum veículo preenchido neste dia.", marginX, 100);
   } else {
+    // Mesma ordem e proporção de colunas da folha original — PREFIXO fica na lateral, estreito
     doc.autoTable({
-      startY: 62,
-      head: [["PREFIXO","EQUIPAMENTO","KM INICIAL","KM FINAL","MOTORISTA","SAÍDA","ENTRADA","SERVIÇO","DESTINO/OBS."]],
+      startY: 90,
+      margin:{left:marginX, right:marginX},
+      head: [["EQUIPAMENTO","PREFIXO","KM INICIAL","KM FINAL","MOTORISTA","SAÍDA","ENTRADA","SERVIÇO REALIZADO","DESTINO/OBSERVAÇÃO"]],
       body: rows,
-      styles:{fontSize:8, cellPadding:4},
-      headStyles:{fillColor:[30,35,40], textColor:255},
-      columnStyles:{1:{cellWidth:150}, 8:{cellWidth:110}}
+      theme: "grid",
+      styles:{fontSize:8, cellPadding:4, lineColor:[0,0,0], lineWidth:0.5, textColor:[0,0,0], valign:"middle"},
+      headStyles:{fillColor:[255,255,255], textColor:[0,0,0], fontStyle:"bold", halign:"center", lineWidth:0.75},
+      columnStyles:{
+        0:{cellWidth:150},
+        1:{cellWidth:38, halign:"center"},
+        8:{cellWidth:110}
+      }
     });
   }
   doc.save(`Portaria_${currentDate}.pdf`);
 }
+
+// ---------- Planilha editável (visão completa do catálogo) ----------
+function renderSheet(){
+  const table = document.getElementById('sheetTable');
+  let html = `<thead><tr>
+    <th>Equipamento</th><th>KM inicial</th><th>KM final</th><th>Motorista</th>
+    <th>Saída</th><th>Entrada</th><th>Serviço</th><th>Destino/Observação</th>
+  </tr></thead><tbody>`;
+
+  ROSTER.forEach(v=>{
+    if(!dayData.entries[v.id] || dayData.entries[v.id].length===0){
+      dayData.entries[v.id] = [emptyTrip()];
+    }
+    const trips = dayData.entries[v.id];
+    const status = vehicleStatus(v.id);
+    trips.forEach((trip, idx)=>{
+      html += `<tr class="row-${status}" data-vid="${v.id}" data-idx="${idx}">
+        <td class="eq">${v.equipamento}<span class="pf">${v.prefixo}${trips.length>1?` · trecho ${idx+1}`:``}</span></td>
+        <td><input data-f="kmInicial" inputmode="numeric" value="${trip.kmInicial}"></td>
+        <td><input data-f="kmFinal" inputmode="numeric" value="${trip.kmFinal}"></td>
+        <td><input data-f="motorista" value="${trip.motorista}"></td>
+        <td><input data-f="saida" placeholder="hh:mm" value="${trip.saida}"></td>
+        <td><input data-f="entrada" placeholder="hh:mm" value="${trip.entrada}"></td>
+        <td><input data-f="servico" value="${trip.servico}"></td>
+        <td><input data-f="destino" value="${trip.destino}"></td>
+      </tr>`;
+    });
+  });
+  html += `</tbody>`;
+  table.innerHTML = html;
+
+  table.querySelectorAll('input').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      const tr = inp.closest('tr');
+      const trip = dayData.entries[tr.dataset.vid][tr.dataset.idx];
+      trip[inp.dataset.f] = inp.value;
+    });
+  });
+}
+function openSheet(){ renderSheet(); document.getElementById('sheetModal').classList.add('show'); }
+function closeSheet(){ render(); document.getElementById('sheetModal').classList.remove('show'); }
 
 // ---------- History modal ----------
 async function openHistorico(){
@@ -541,6 +666,10 @@ document.getElementById('data').addEventListener('change', (e)=>{
 });
 document.getElementById('btnSalvar').onclick = ()=>saveDay(false);
 document.getElementById('btnPdf').onclick = async ()=>{ await saveDay(true); gerarPDF(); };
+document.getElementById('btnPlanilha').onclick = openSheet;
+document.getElementById('btnFecharSheet').onclick = closeSheet;
+document.getElementById('btnSalvarSheet').onclick = async ()=>{ await saveDay(false); render(); };
+document.getElementById('btnPdfSheet').onclick = async ()=>{ await saveDay(true); gerarPDF(); };
 document.getElementById('btnHistorico').onclick = openHistorico;
 document.getElementById('btnFecharHist').onclick = closeHistorico;
 document.getElementById('btnLimpar').onclick = ()=>{
