@@ -643,7 +643,8 @@ function render(){
 // ---------- PDF export (replica fiel do layout da planilha original) ----------
 function gerarPDF(){
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({orientation:"landscape", unit:"pt", format:"a4"});
+  // Folha ofício padrão (216 x 330 mm ≈ 612.3 x 935.4 pt), na horizontal
+  const doc = new jsPDF({orientation:"landscape", unit:"pt", format:[935.43, 612.28]});
   const responsavel = document.getElementById('responsavel').value || "—";
   const dataFmt = currentDate.split('-').reverse().join('/');
   const pageW = doc.internal.pageSize.getWidth();
@@ -701,6 +702,7 @@ function gerarPDF(){
       body: rows,
       theme: "grid",
       showHead: "firstPage",
+      rowPageBreak: "avoid",
       styles:{fontSize:8, cellPadding:4, lineColor:[0,0,0], lineWidth:0.5, textColor:[0,0,0], valign:"middle"},
       headStyles:{fillColor:[255,255,255], textColor:[0,0,0], fontStyle:"bold", halign:"center", valign:"middle", lineWidth:0.75},
       columnStyles:{
