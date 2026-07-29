@@ -140,6 +140,14 @@
   }
   .fab-row button{flex:1; padding:13px; font-size:14px; border-radius:8px;}
 
+  .searchbar{margin-bottom:10px;}
+  .searchbar input{
+    width:100%; background:var(--panel); border:1px solid var(--line); color:var(--text);
+    border-radius:8px; padding:11px 12px; font-size:15px; font-family:'IBM Plex Mono',monospace;
+  }
+  .searchbar input:focus{outline:none; border-color:var(--amber);}
+  .searchbar input::placeholder{color:var(--text-dim); font-family:'Barlow',sans-serif;}
+
   .filterbar{display:flex; gap:6px; margin-bottom:12px; overflow-x:auto; padding-bottom:2px;}
   .chip{
     flex:none; font-size:12px; padding:6px 12px; border-radius:999px;
@@ -257,6 +265,10 @@
     <span><b id="cntTotal">47</b> veículos</span>
   </div>
 
+  <div class="searchbar">
+    <input id="buscaPrefixo" type="text" inputmode="numeric" placeholder="🔎 Buscar por prefixo…" autocomplete="off">
+  </div>
+
   <div class="filterbar">
     <div class="chip active" data-filter="all">Todos</div>
     <div class="chip" data-filter="data">Com dados</div>
@@ -352,7 +364,7 @@ if('serviceWorker' in navigator){
 const ROSTER = [
 ["3717","CAVALO MECÂNICO"],
 ["3799","CAMINHÃO ESPARGIDOR 6X4 - EDJALMA"],
-["3823","FROTA LEVE FIAT/STRADA ENDURANCE"],
+["3829","FROTA LEVE FIAT/STRADA ENDURANCE"],
 ["3846","CAMINHÃO BASCULANTE 6X4 - GUTEMBERG"],
 ["3847","CAMINHÃO BASCULANTE 6X4 - JOSUÉ"],
 ["3848","CAMINHÃO BASCULANTE 6X4 - ROBSON"],
@@ -407,6 +419,7 @@ let currentDate = todayISO();
 let dayData = { responsavel:"", entries:{} }; // entries[vehicleId] = [trip,...]
 let openCards = new Set();
 let activeFilter = "all";
+let searchQuery = "";
 
 function todayISO(){
   const d = new Date();
@@ -471,10 +484,15 @@ function render(){
   list.innerHTML = "";
   let cntPreench = 0, cntAndamento = 0;
 
+  const q = searchQuery.trim().toLowerCase();
+  const matches = q ? ROSTER.filter(v => v.prefixo.toLowerCase().includes(q)) : null;
+  if(matches && matches.length === 1) openCards.add(matches[0].id);
+
   ROSTER.forEach(v=>{
     const status = vehicleStatus(v.id);
     if(status !== "vazio") cntPreench++;
     if(status === "andamento") cntAndamento++;
+    if(q && !v.prefixo.toLowerCase().includes(q)) return;
     if(activeFilter === "data" && status === "vazio") return;
     if(activeFilter === "andamento" && status !== "andamento") return;
     if(activeFilter === "vazio" && status !== "vazio") return;
@@ -548,6 +566,10 @@ function render(){
     card.appendChild(tripsWrap);
     list.appendChild(card);
   });
+
+  if(list.children.length === 0){
+    list.innerHTML = `<div class="empty">Nenhum veículo encontrado para "${searchQuery}".</div>`;
+  }
 
   document.getElementById('cntPreench').textContent = cntPreench;
   document.getElementById('cntAndamento').textContent = cntAndamento;
@@ -813,6 +835,10 @@ document.getElementById('btnLimpar').onclick = ()=>{
     render();
   }
 };
+document.getElementById('buscaPrefixo').addEventListener('input', (e)=>{
+  searchQuery = e.target.value;
+  render();
+});
 document.querySelectorAll('.chip').forEach(chip=>{
   chip.onclick = ()=>{
     document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
