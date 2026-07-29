@@ -210,6 +210,17 @@
     display:flex; gap:8px;
   }
   .sheet-foot button{flex:1; padding:12px;}
+
+  .repasse-block{padding:16px;}
+  .repasse-section{margin-bottom:22px;}
+  .repasse-section:last-child{margin-bottom:0; border-top:1px solid var(--line); padding-top:18px;}
+  .repasse-section textarea{
+    width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    border-radius:8px; padding:10px; font-family:'IBM Plex Mono',monospace; font-size:12px;
+    resize:vertical;
+  }
+  .repasse-section .row{display:flex; gap:8px; margin-top:8px;}
+  .repasse-section .row button{flex:1;}
 </style>
 </head>
 <body>
@@ -234,6 +245,7 @@
   </div>
   <div class="actionbar">
     <button class="btn-ghost btn-sm" id="btnHistorico">📅 Histórico</button>
+    <button class="btn-ghost btn-sm" id="btnRepassar">🔁 Repassar plantão</button>
     <button class="btn-ghost btn-sm" id="btnLimpar">Limpar dia</button>
   </div>
 </header>
@@ -272,6 +284,32 @@
   <div class="sheet-foot">
     <button class="btn-ghost" id="btnSalvarSheet">💾 Salvar alterações</button>
     <button class="btn-primary" id="btnPdfSheet">📄 Salvar e gerar PDF</button>
+  </div>
+</div>
+
+<div class="sheet-modal" id="repasseModal">
+  <div class="sheet-head">
+    <h2>Repasse de plantão</h2>
+    <button class="btn-ghost btn-sm" id="btnFecharRepasse">Fechar ✕</button>
+  </div>
+  <div class="sheet-scroll">
+    <div class="repasse-block">
+      <div class="repasse-section">
+        <div class="trip-label">Enviar (veículos em rota, sem entrada)</div>
+        <textarea id="repasseTexto" rows="10" readonly></textarea>
+        <div class="row">
+          <button class="btn-ghost" id="btnCopiarRepasse">📋 Copiar</button>
+          <button class="btn-primary" id="btnCompartilharRepasse">📤 Compartilhar</button>
+        </div>
+      </div>
+      <div class="repasse-section">
+        <div class="trip-label">Receber (colar texto do colega)</div>
+        <textarea id="importTexto" rows="6" placeholder="Cole aqui o texto que você recebeu…"></textarea>
+        <div class="row">
+          <button class="btn-primary" id="btnImportarRepasse">📥 Importar</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -628,6 +666,73 @@ function renderSheet(){
 function openSheet(){ renderSheet(); document.getElementById('sheetModal').classList.add('show'); }
 function closeSheet(){ render(); document.getElementById('sheetModal').classList.remove('show'); }
 
+// ---------- Repasse de plantão (compartilhar / importar veículos em rota) ----------
+function gerarTextoRepasse(){
+  const abertos = ROSTER.filter(v => vehicleStatus(v.id) === "andamento");
+  if(abertos.length === 0) return null;
+
+  const payload = abertos.map(v=>{
+    const trips = dayData.entries[v.id];
+    const last = trips[trips.length-1];
+    return {p:v.prefixo, k:last.kmInicial||"", m:last.motorista||"", s:last.saida||"", sv:last.servico||"", d:last.destino||""};
+  });
+  const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+  const code = "PORTARIA-REPASSE-V1:" + b64;
+
+  let texto = `🔁 REPASSE DE PLANTÃO — ${currentDate.split('-').reverse().join('/')}\n`;
+  texto += `De: ${document.getElementById('responsavel').value || "—"}\n\n`;
+  texto += `Veículos em rota (sem entrada):\n`;
+  abertos.forEach(v=>{
+    const trips = dayData.entries[v.id];
+    const last = trips[trips.length-1];
+    texto += `\n• ${v.prefixo} — ${v.equipamento}\n  KM inicial: ${last.kmInicial||"—"} | Motorista: ${last.motorista||"—"} | Saída: ${last.saida||"—"}\n  Destino: ${last.destino||"—"}\n`;
+  });
+  texto += `\n— Cole este texto inteiro em "Receber" no app pra importar automático —\n${code}`;
+  return texto;
+}
+
+function refreshRepasseModal(){
+  const texto = gerarTextoRepasse();
+  document.getElementById('repasseTexto').value = texto || "Nenhum veículo em rota sem entrada no momento.";
+}
+
+function openRepasse(){ refreshRepasseModal(); document.getElementById('repasseModal').classList.add('show'); }
+function closeRepasse(){ document.getElementById('repasseModal').classList.remove('show'); }
+
+function importarRepasse(texto){
+  const match = texto.match(/PORTARIA-REPASSE-V1:([A-Za-z0-9+/=]+)/);
+  if(!match){ showToast("Código não encontrado no texto colado"); return; }
+  let payload;
+  try{
+    payload = JSON.parse(decodeURIComponent(escape(atob(match[1]))));
+  }catch(e){ showToast("Código inválido ou corrompido"); return; }
+
+  let count = 0;
+  payload.forEach(item=>{
+    const v = ROSTER.find(r => r.prefixo === item.p);
+    if(!v) return;
+    const trip = {kmInicial:item.k||"", kmFinal:"", motorista:item.m||"", saida:item.s||"", entrada:"", servico:item.sv||"", destino:item.d||""};
+    const existentes = dayData.entries[v.id];
+    const temDadosLocais = existentes && existentes.some(t => t.kmInicial || t.motorista || t.saida || t.entrada);
+    if(!temDadosLocais){
+      dayData.entries[v.id] = [trip];
+    } else {
+      existentes.push(trip);
+    }
+    openCards.add(v.id);
+    count++;
+  });
+
+  if(count > 0){
+    render();
+    saveDay(true);
+    showToast(`${count} veículo${count>1?'s':''} importado${count>1?'s':''} ✓`);
+    document.getElementById('importTexto').value = "";
+  } else {
+    showToast("Nenhum veículo correspondente encontrado");
+  }
+}
+
 // ---------- History modal ----------
 async function openHistorico(){
   const wrap = document.getElementById('histList');
@@ -673,6 +778,35 @@ document.getElementById('btnSalvarSheet').onclick = async ()=>{ await saveDay(fa
 document.getElementById('btnPdfSheet').onclick = async ()=>{ await saveDay(true); gerarPDF(); };
 document.getElementById('btnHistorico').onclick = openHistorico;
 document.getElementById('btnFecharHist').onclick = closeHistorico;
+document.getElementById('btnRepassar').onclick = openRepasse;
+document.getElementById('btnFecharRepasse').onclick = closeRepasse;
+document.getElementById('btnCopiarRepasse').onclick = async ()=>{
+  const texto = document.getElementById('repasseTexto').value;
+  try{
+    await navigator.clipboard.writeText(texto);
+    showToast("Copiado ✓");
+  }catch(e){
+    showToast("Não foi possível copiar — selecione e copie manualmente");
+  }
+};
+document.getElementById('btnCompartilharRepasse').onclick = async ()=>{
+  const texto = document.getElementById('repasseTexto').value;
+  if(navigator.share){
+    try{ await navigator.share({text:texto}); }catch(e){ /* usuário cancelou */ }
+  } else {
+    try{
+      await navigator.clipboard.writeText(texto);
+      showToast("Copiado ✓ (compartilhar direto não é suportado aqui)");
+    }catch(err){
+      showToast("Copie manualmente o texto acima");
+    }
+  }
+};
+document.getElementById('btnImportarRepasse').onclick = ()=>{
+  const texto = document.getElementById('importTexto').value.trim();
+  if(!texto){ showToast("Cole o texto recebido primeiro"); return; }
+  importarRepasse(texto);
+};
 document.getElementById('btnLimpar').onclick = ()=>{
   if(confirm("Limpar todos os dados preenchidos hoje?")){
     dayData.entries = {};
