@@ -129,6 +129,18 @@
   }
   .trip-grid textarea{font-family:'Barlow',sans-serif; resize:vertical; min-height:34px;}
   .trip-grid input:focus, .trip-grid textarea:focus{outline:none; border-color:var(--amber);}
+  .trip-grid textarea{text-transform:uppercase;}
+
+  .time-wrap{display:flex; gap:6px;}
+  .time-wrap input{flex:1; min-width:0;}
+  .btn-now{flex:none; padding:8px 9px; font-size:11px; white-space:nowrap;}
+
+  .dest-chips{display:flex; flex-wrap:wrap; gap:5px; margin-top:7px;}
+  .dest-chip{
+    font-size:10.5px; padding:4px 9px; border-radius:999px; border:1px solid var(--line);
+    color:var(--text-dim); background:var(--panel-2); cursor:pointer; white-space:nowrap;
+  }
+  .dest-chip.active{background:var(--amber); color:#1A1204; border-color:var(--amber); font-weight:600;}
   .trip-foot{display:flex; justify-content:flex-end; margin-top:6px;}
 
   .add-trip{width:100%; margin-top:2px; border-style:dashed;}
@@ -266,7 +278,7 @@
   </div>
 
   <div class="searchbar">
-    <input id="buscaPrefixo" type="text" inputmode="numeric" placeholder="🔎 Buscar por prefixo…" autocomplete="off">
+    <input id="buscaPrefixo" type="text" placeholder="🔎 Buscar por prefixo ou placa…" autocomplete="off" autocapitalize="characters">
   </div>
 
   <div class="filterbar">
@@ -394,7 +406,7 @@ const ROSTER = [
 ["4033","CAMINHÃO COMBOIO 6X4 - JOSELITO"],
 ["4068","FIAT MOBI LIKE"],
 ["4090","CAMINHÃO BASCULANTE 6X4 - LUCIANO"],
-["4104","CAMINHÃO BASCULANTE 6X4 - FABRÍCIO"],
+["4109","CAMINHÃO BASCULANTE 6X4 - FABRÍCIO"],
 ["4124","NISSAN FRONTIER"],
 ["4129","CAMINHÃO BASCULANTE 6X4 - AMONIO"],
 ["4130","CAMINHÃO BASCULANTE 6X4 - MIZAEL"],
@@ -403,10 +415,10 @@ const ROSTER = [
 ["4165","CAMINHÃO PIPA 6X4"],
 ["4166","CAMINHÃO PIPA 6X4"],
 ["4192","FIAT STRADA FREEDOM"],
-["RGKF870","CCT-02 CAMINHÃO 3X4 - MILTON"],
-["RGNC238","CCT-03 CAMINHÃO 3X4 - NILSON"],
-["RGNC248","CCT-04 CAMINHÃO 3X4 - ARIOMAR"],
-["RQBJ684","VAT-33 VW/T-CROSS"],
+["RGK8F70","CCT-02 CAMINHÃO 3X4 - MILTON"],
+["RGN2C38","CCT-03 CAMINHÃO 3X4 - NILSON"],
+["RGN2C48","CCT-04 CAMINHÃO 3X4 - ARIOMAR"],
+["RQB6J84","VAT-33 VW/T-CROSS"],
 ["TYB4B72","VAT-79 RENAULT KWID ZEN"],
 ["TEC0A11","VAT-104 HYUNDAI/HB20"]
 ].map((v,i)=>({id:"v"+i, prefixo:v[0], equipamento:v[1]}));
@@ -414,6 +426,11 @@ const ROSTER = [
 function emptyTrip(){
   return {kmInicial:"", kmFinal:"", motorista:"", saida:"", entrada:"", servico:"", destino:""};
 }
+
+const DESTINOS_SUGERIDOS = [
+  "SALVADOR","POJUCA","CER","ENTRE RIOS","MASSAPÊ","MASSAPÊ 2","PEDREIRAS",
+  "JACUÍPE","FAV","CATU","ARAÇÁS VPR","JANDAIA","CANTEIRO","ROU 39"
+];
 
 let currentDate = todayISO();
 let dayData = { responsavel:"", entries:{} }; // entries[vehicleId] = [trip,...]
@@ -535,15 +552,63 @@ function render(){
           <div class="field"><label>KM final</label><input data-f="kmFinal" inputmode="numeric" placeholder="0" value="${trip.kmFinal}"></div>
           <div class="field"><label>Motorista</label><input data-f="motorista" placeholder="Nome" value="${trip.motorista}"></div>
           <div class="field"><label>Serviço realizado</label><input data-f="servico" placeholder="—" value="${trip.servico}"></div>
-          <div class="field"><label>Saída</label><input data-f="saida" placeholder="hh:mm" value="${trip.saida}"></div>
-          <div class="field"><label>Entrada</label><input data-f="entrada" placeholder="hh:mm" value="${trip.entrada}"></div>
-          <div class="field full"><label>Destino / Observação</label><textarea data-f="destino" rows="1">${trip.destino}</textarea></div>
+          <div class="field"><label>Saída</label>
+            <div class="time-wrap">
+              <input data-f="saida" placeholder="hh:mm" value="${trip.saida}">
+              <button type="button" class="btn-ghost btn-now" data-now="saida">🕒 Agora</button>
+            </div>
+          </div>
+          <div class="field"><label>Entrada</label>
+            <div class="time-wrap">
+              <input data-f="entrada" placeholder="hh:mm" value="${trip.entrada}">
+              <button type="button" class="btn-ghost btn-now" data-now="entrada">🕒 Agora</button>
+            </div>
+          </div>
+          <div class="field full">
+            <label>Destino / Observação</label>
+            <textarea data-f="destino" rows="1">${trip.destino}</textarea>
+            <div class="dest-chips">
+              ${DESTINOS_SUGERIDOS.map(d=>{
+                const ativos = trip.destino.split(',').map(s=>s.trim().toUpperCase());
+                return `<span class="dest-chip${ativos.includes(d)?' active':''}" data-dest="${d}">${d}</span>`;
+              }).join('')}
+            </div>
+          </div>
         </div>
         <div class="trip-foot">
           ${trips.length>1 ? `<button class="btn-danger btn-sm" data-del="1">Remover viagem</button>` : ``}
         </div>`;
       t.querySelectorAll('[data-f]').forEach(inp=>{
-        inp.addEventListener('input', ()=>{ trip[inp.dataset.f] = inp.value; });
+        inp.addEventListener('input', ()=>{
+          if(inp.dataset.f === 'destino'){
+            const pos = inp.selectionStart;
+            inp.value = inp.value.toUpperCase();
+            inp.setSelectionRange(pos, pos);
+          }
+          trip[inp.dataset.f] = inp.value;
+        });
+      });
+      t.querySelectorAll('[data-now]').forEach(btn=>{
+        btn.onclick = ()=>{
+          const now = new Date();
+          const hh = String(now.getHours()).padStart(2,'0');
+          const mm = String(now.getMinutes()).padStart(2,'0');
+          trip[btn.dataset.now] = `${hh}:${mm}`;
+          openCards.add(v.id);
+          render();
+        };
+      });
+      t.querySelectorAll('.dest-chip').forEach(chip=>{
+        chip.onclick = ()=>{
+          const textarea = t.querySelector('textarea[data-f="destino"]');
+          let partes = textarea.value.split(',').map(s=>s.trim()).filter(Boolean);
+          const nome = chip.dataset.dest;
+          const idx2 = partes.findIndex(p=>p.toUpperCase()===nome);
+          if(idx2 >= 0){ partes.splice(idx2,1); } else { partes.push(nome); }
+          textarea.value = partes.join(', ');
+          trip.destino = textarea.value;
+          chip.classList.toggle('active');
+        };
       });
       const delBtn = t.querySelector('[data-del]');
       if(delBtn) delBtn.onclick = ()=>{ trips.splice(idx,1); render(); };
@@ -635,6 +700,7 @@ function gerarPDF(){
       head: [["EQUIPAMENTO","P\nR\nE\nF\nI\nX\nO","KM INICIAL","KM FINAL","MOTORISTA","SAÍDA","ENTRADA","SERVIÇO REALIZADO","DESTINO/OBSERVAÇÃO"]],
       body: rows,
       theme: "grid",
+      showHead: "firstPage",
       styles:{fontSize:8, cellPadding:4, lineColor:[0,0,0], lineWidth:0.5, textColor:[0,0,0], valign:"middle"},
       headStyles:{fillColor:[255,255,255], textColor:[0,0,0], fontStyle:"bold", halign:"center", valign:"middle", lineWidth:0.75},
       columnStyles:{
@@ -679,6 +745,11 @@ function renderSheet(){
 
   table.querySelectorAll('input').forEach(inp=>{
     inp.addEventListener('input', ()=>{
+      if(inp.dataset.f === 'destino'){
+        const pos = inp.selectionStart;
+        inp.value = inp.value.toUpperCase();
+        inp.setSelectionRange(pos, pos);
+      }
       const tr = inp.closest('tr');
       const trip = dayData.entries[tr.dataset.vid][tr.dataset.idx];
       trip[inp.dataset.f] = inp.value;
