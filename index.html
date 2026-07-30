@@ -678,14 +678,25 @@ function gerarPDF(){
   const rows = [];
   ROSTER.forEach(v=>{
     const trips = dayData.entries[v.id] || [];
+    const preenchidas = trips.filter(t => t.kmInicial || t.kmFinal || t.saida || t.entrada || t.motorista || t.destino);
+    if(preenchidas.length === 0) return;
     const prefixoVertical = v.prefixo.split("").join("\n"); // cada caractere numa linha, igual ao original
-    trips.forEach(t=>{
-      const filled = t.kmInicial || t.kmFinal || t.saida || t.entrada || t.motorista || t.destino;
-      if(!filled) return;
-      rows.push([
-        v.equipamento, prefixoVertical, t.kmInicial||"", t.kmFinal||"", t.motorista||"",
-        t.saida||"", t.entrada||"", t.servico||"", t.destino||""
-      ]);
+
+    preenchidas.forEach((t, i)=>{
+      if(i === 0){
+        // Primeira linha do veículo: EQUIPAMENTO e PREFIXO mesclados (rowSpan) por todas as linhas dele,
+        // igual à ficha física — assim o bloco nunca fica cortado entre páginas.
+        rows.push([
+          {content: v.equipamento, rowSpan: preenchidas.length, styles:{valign:"middle"}},
+          {content: prefixoVertical, rowSpan: preenchidas.length, styles:{halign:"center", valign:"middle", fontSize:8}},
+          t.kmInicial||"", t.kmFinal||"", t.motorista||"", t.saida||"", t.entrada||"", t.servico||"", t.destino||""
+        ]);
+      } else {
+        // Linhas seguintes do mesmo veículo: sem EQUIPAMENTO/PREFIXO (já mesclados acima), só os dados da viagem
+        rows.push([
+          t.kmInicial||"", t.kmFinal||"", t.motorista||"", t.saida||"", t.entrada||"", t.servico||"", t.destino||""
+        ]);
+      }
     });
   });
 
