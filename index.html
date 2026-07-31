@@ -680,7 +680,6 @@ function gerarPDF(){
   ROSTER.forEach(v=>{
     const trips = dayData.entries[v.id] || [];
     const preenchidas = trips.filter(t => t.kmInicial || t.kmFinal || t.saida || t.entrada || t.motorista || t.destino);
-    if(preenchidas.length === 0) return;
     const prefixoVertical = v.prefixo.split("").join("\n"); // cada caractere numa linha, igual ao original
 
     // Sempre no mínimo 4 linhas no quadrado (igual à ficha física, com espaço pra mais motoristas no dia).
