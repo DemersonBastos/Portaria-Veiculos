@@ -643,8 +643,8 @@ function render(){
 // ---------- PDF export (replica fiel do layout da planilha original) ----------
 function gerarPDF(){
   const { jsPDF } = window.jspdf;
-  // Folha ofício padrão (216 x 330 mm ≈ 612.3 x 935.4 pt), na horizontal
-  const doc = new jsPDF({orientation:"landscape", unit:"pt", format:[935.43, 612.28]});
+  // Folha ofício padrão (216 x 330 mm ≈ 612.3 x 935.4 pt), girada pra horizontal (paisagem)
+  const doc = new jsPDF({orientation:"landscape", unit:"pt", format:[612.28, 935.43]});
   const responsavel = document.getElementById('responsavel').value || "—";
   const dataFmt = currentDate.split('-').reverse().join('/');
   const pageW = doc.internal.pageSize.getWidth();
