@@ -16,6 +16,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
   :root{
     --bg:#14181C;
@@ -141,6 +142,22 @@
     color:var(--text-dim); background:var(--panel-2); cursor:pointer; white-space:nowrap;
   }
   .dest-chip.active{background:var(--amber); color:#1A1204; border-color:var(--amber); font-weight:600;}
+
+  .scan-status{
+    font-size:12.5px; color:var(--amber); background:var(--amber-dim); border-radius:8px;
+    padding:9px 11px; margin-bottom:12px; display:none;
+  }
+  .scan-status.show{display:block;}
+  .scan-card{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; margin-bottom:10px;
+  }
+  .scan-card-head{
+    display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; gap:8px;
+  }
+  .scan-check{display:flex; align-items:center; gap:8px; font-size:13px; min-width:0;}
+  .scan-check input[type="checkbox"]{flex:none; width:16px; height:16px;}
+  .scan-hint{font-size:12px; color:var(--text-dim); margin-bottom:12px; line-height:1.5;}
   .trip-foot{display:flex; justify-content:flex-end; margin-top:6px;}
 
   .add-trip{width:100%; margin-top:2px; border-style:dashed;}
@@ -266,6 +283,7 @@
   <div class="actionbar">
     <button class="btn-ghost btn-sm" id="btnHistorico">📅 Histórico</button>
     <button class="btn-ghost btn-sm" id="btnRepassar">🔁 Repassar plantão</button>
+    <button class="btn-ghost btn-sm" id="btnEscanear">📷 Escanear</button>
     <button class="btn-ghost btn-sm" id="btnLimpar">Limpar dia</button>
   </div>
 </header>
@@ -332,6 +350,25 @@
         <div class="row">
           <button class="btn-primary" id="btnImportarRepasse">📥 Importar</button>
         </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sheet-modal" id="scanModal">
+  <div class="sheet-head">
+    <h2>Escanear planilha</h2>
+    <button class="btn-ghost btn-sm" id="btnFecharScan">Fechar ✕</button>
+  </div>
+  <div class="sheet-scroll">
+    <div class="repasse-block">
+      <div class="scan-hint">Tire a foto da folha bem iluminada e reta. O app procura os prefixos conhecidos e tenta puxar KM, motorista e horário de perto de cada um — <b>confira e edite antes de aplicar</b>, letra de mão pode sair errada.</div>
+      <input type="file" accept="image/*" capture="environment" id="fotoInput" style="display:none">
+      <button class="btn-primary" id="btnTirarFoto" style="width:100%;">📷 Tirar foto / Escolher imagem</button>
+      <div class="scan-status" id="scanStatus"></div>
+      <div id="scanResults"></div>
+      <div class="row" id="scanApplyRow" style="display:none; margin-top:6px;">
+        <button class="btn-primary" id="btnAplicarScan">✓ Aplicar selecionados à lista</button>
       </div>
     </div>
   </div>
@@ -643,8 +680,8 @@ function render(){
 // ---------- PDF export (replica fiel do layout da planilha original) ----------
 function gerarPDF(){
   const { jsPDF } = window.jspdf;
-  // Folha ofício padrão (216 x 330 mm ≈ 612.3 x 935.4 pt), girada pra horizontal (paisagem)
-  const doc = new jsPDF({orientation:"landscape", unit:"pt", format:[612.28, 935.43]});
+  // Folha ofício padrão (216 x 330 mm ≈ 612.3 x 935.4 pt), na vertical (retrato)
+  const doc = new jsPDF({orientation:"portrait", unit:"pt", format:[612.28, 935.43]});
   const responsavel = document.getElementById('responsavel').value || "—";
   const dataFmt = currentDate.split('-').reverse().join('/');
   const pageW = doc.internal.pageSize.getWidth();
@@ -846,6 +883,138 @@ function importarRepasse(texto){
   }
 }
 
+// ---------- Escanear planilha por foto (OCR) ----------
+let scanCandidatos = [];
+
+function openScan(){
+  document.getElementById('scanModal').classList.add('show');
+}
+function closeScan(){
+  document.getElementById('scanModal').classList.remove('show');
+}
+
+async function processarFotoOCR(file){
+  const statusEl = document.getElementById('scanStatus');
+  const resultsWrap = document.getElementById('scanResults');
+  const applyRow = document.getElementById('scanApplyRow');
+  resultsWrap.innerHTML = "";
+  applyRow.style.display = "none";
+  scanCandidatos = [];
+  statusEl.classList.add('show');
+  statusEl.textContent = "Carregando leitor de texto…";
+
+  try{
+    const { data: { text } } = await Tesseract.recognize(file, 'por', {
+      logger: (m)=>{
+        if(m.status === 'recognizing text'){
+          statusEl.textContent = `Lendo a foto… ${Math.round((m.progress||0)*100)}%`;
+        } else if(m.status){
+          statusEl.textContent = m.status;
+        }
+      }
+    });
+    scanCandidatos = extrairCandidatosOCR(text);
+    statusEl.textContent = scanCandidatos.length > 0
+      ? `${scanCandidatos.length} veículo(s) reconhecido(s) — revise antes de aplicar`
+      : "Nenhum prefixo reconhecido nessa foto. Tente com mais luz/foco, ou preencha manualmente.";
+    renderScanCandidatos();
+  }catch(e){
+    statusEl.textContent = "Erro ao ler a imagem. Tente novamente.";
+  }
+}
+
+function extrairCandidatosOCR(textoOCR){
+  const linhas = textoOCR.split('\n').map(l=>l.trim()).filter(Boolean);
+  const candidatos = [];
+  linhas.forEach(linha=>{
+    const linhaUpper = linha.toUpperCase();
+    const veic = ROSTER.find(v => new RegExp('(^|[^A-Z0-9])'+v.prefixo+'([^A-Z0-9]|$)','i').test(linhaUpper));
+    if(!veic) return;
+
+    const numeros = (linha.match(/\b\d{2,7}\b/g) || []).filter(n => n !== veic.prefixo);
+    const horaMatch = linha.match(/\b([01]?\d|2[0-3])[:hH]([0-5]\d)\b/);
+    const hora = horaMatch ? `${horaMatch[1].padStart(2,'0')}:${horaMatch[2]}` : "";
+
+    const palavras = linha.replace(/[^\p{L}\s]/gu,' ').split(/\s+/).filter(w=>w.length>=3);
+    const equipUpper = veic.equipamento.toUpperCase();
+    const nomeCandidato = palavras.find(w => !equipUpper.includes(w.toUpperCase())) || "";
+
+    candidatos.push({
+      vid: veic.id, prefixo: veic.prefixo, equipamento: veic.equipamento,
+      kmInicial: numeros[0] || "", motorista: nomeCandidato.toUpperCase(), saida: hora, destino: ""
+    });
+  });
+  return candidatos;
+}
+
+function renderScanCandidatos(){
+  const wrap = document.getElementById('scanResults');
+  const applyRow = document.getElementById('scanApplyRow');
+  wrap.innerHTML = "";
+  if(scanCandidatos.length === 0){ applyRow.style.display = "none"; return; }
+  applyRow.style.display = "flex";
+
+  scanCandidatos.forEach((c, idx)=>{
+    const card = document.createElement('div');
+    card.className = "scan-card";
+    card.innerHTML = `
+      <div class="scan-card-head">
+        <label class="scan-check">
+          <input type="checkbox" checked class="scan-toggle" data-scanidx="${idx}">
+          <span class="prefixo">${c.prefixo}</span> ${c.equipamento}
+        </label>
+        <button class="btn-ghost btn-sm" data-remove="${idx}">Remover</button>
+      </div>
+      <div class="trip-grid">
+        <div class="field"><label>KM inicial</label><input data-sf="kmInicial" value="${c.kmInicial}"></div>
+        <div class="field"><label>Motorista</label><input data-sf="motorista" value="${c.motorista}"></div>
+        <div class="field"><label>Saída</label><input data-sf="saida" placeholder="hh:mm" value="${c.saida}"></div>
+        <div class="field full"><label>Destino</label><input data-sf="destino" value="${c.destino}"></div>
+      </div>`;
+    card.querySelectorAll('[data-sf]').forEach(inp=>{
+      inp.addEventListener('input', ()=>{
+        const val = inp.dataset.sf === 'destino' || inp.dataset.sf === 'motorista' ? inp.value.toUpperCase() : inp.value;
+        scanCandidatos[idx][inp.dataset.sf] = val;
+      });
+    });
+    card.querySelector('[data-remove]').onclick = ()=>{ scanCandidatos.splice(idx,1); renderScanCandidatos(); };
+    wrap.appendChild(card);
+  });
+}
+
+function aplicarCandidatosScan(){
+  const checks = document.querySelectorAll('.scan-toggle');
+  let count = 0;
+  checks.forEach(chk=>{
+    if(!chk.checked) return;
+    const idx = Number(chk.dataset.scanidx);
+    const c = scanCandidatos[idx];
+    if(!c) return;
+    const trip = {kmInicial:c.kmInicial||"", kmFinal:"", motorista:c.motorista||"", saida:c.saida||"", entrada:"", servico:"", destino:c.destino||""};
+    const existentes = dayData.entries[c.vid];
+    const temDadosLocais = existentes && existentes.some(t => t.kmInicial || t.motorista || t.saida || t.entrada);
+    if(!temDadosLocais){
+      dayData.entries[c.vid] = [trip];
+    } else {
+      existentes.push(trip);
+    }
+    openCards.add(c.vid);
+    count++;
+  });
+  if(count > 0){
+    render();
+    saveDay(true);
+    showToast(`${count} veículo${count>1?'s':''} atualizado${count>1?'s':''} pela foto ✓`);
+    closeScan();
+    document.getElementById('scanResults').innerHTML = "";
+    document.getElementById('scanStatus').classList.remove('show');
+    document.getElementById('scanApplyRow').style.display = "none";
+    scanCandidatos = [];
+  } else {
+    showToast("Nenhum item selecionado");
+  }
+}
+
 // ---------- History modal ----------
 async function openHistorico(){
   const wrap = document.getElementById('histList');
@@ -920,6 +1089,15 @@ document.getElementById('btnImportarRepasse').onclick = ()=>{
   if(!texto){ showToast("Cole o texto recebido primeiro"); return; }
   importarRepasse(texto);
 };
+document.getElementById('btnEscanear').onclick = openScan;
+document.getElementById('btnFecharScan').onclick = closeScan;
+document.getElementById('btnTirarFoto').onclick = ()=>{ document.getElementById('fotoInput').click(); };
+document.getElementById('fotoInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(file) processarFotoOCR(file);
+  e.target.value = "";
+});
+document.getElementById('btnAplicarScan').onclick = aplicarCandidatosScan;
 document.getElementById('btnLimpar').onclick = ()=>{
   if(confirm("Limpar todos os dados preenchidos hoje?")){
     dayData.entries = {};
